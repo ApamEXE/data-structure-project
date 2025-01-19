@@ -1,6 +1,8 @@
-#include<iostream>
-#include "Reservation.h"
-#include <fstream>
+//Main.cpp
+#define _CRT_SECURE_NO_WARNINGS
+// suppressed warning kalau pakai ctime
+#include "HotelReservation.h"
+#include <iostream>
 
 using namespace std;
 
@@ -8,18 +10,21 @@ void showMenu() {
     cout << "\n--- Hotel Reservation System ---" << endl;
     cout << "1. Admin Login" << endl;
     cout << "2. Guest Reservation" << endl;
-    cout << "3. Exit" << endl;
-    cout << "Please select an option (1-3): ";
+    cout << "3. Price Calculator" << endl;
+    cout << "4. Exit" << endl;
+    cout << "Please select an option (1-4): ";
 }
 
 int main() {
     Hotel hotel;
     GuestList guestList;
-    Admin admin;
+    guestList.loadFromFile("reservations.txt");
+    // Initialize Admin object here properly
+    Admin admin;  // Ensure admin is properly initialized
 
     int choice;
     while (true) {
-        showMenu();  // Display the menu
+        showMenu();
         cin >> choice;
 
         switch (choice) {
@@ -32,7 +37,7 @@ int main() {
             cout << "Enter password: ";
             cin >> pass;
 
-            if (admin.login(user, pass)) {
+            if (admin.login(user, pass)) {  // Ensure the admin object is initialized
                 cout << "\nLogin successful!" << endl;
 
                 // Admin options menu
@@ -42,18 +47,17 @@ int main() {
                     cout << "1. View Available Rooms" << endl;
                     cout << "2. Update Room Availability" << endl;
                     cout << "3. View Reservation List" << endl;
-                    cout << "4. Logout" << endl;
-                    cout << "Please select an option (1-4): ";
+                    cout << "4. Search Reservation" << endl;
+                    cout << "5. Process Reservations" << endl;  // New option to process reservations
+                    cout << "6. Extend Reservations" << endl;
+                    cout << "7. Logout" << endl;
+                    cout << "Please select an option (1-7): ";
                     cin >> adminChoice;
 
                     switch (adminChoice) {
                     case 1:
-                        //  guestList.loadFromFile("iFile.txt");  // Load guest list from file
-
-                          // Now display available rooms
-                        hotel.displayAvailableRoomsByType();  // Display available rooms by type
+                        hotel.displayAvailableRoomsByType(guestList);
                         break;
-
                     case 2: {
                         int roomNumber;
                         bool availability;
@@ -61,13 +65,11 @@ int main() {
                         cin >> roomNumber;
                         cout << "Enter new availability (1 for available, 0 for not available): ";
                         cin >> availability;
-                        hotel.updateRoomAvailability(roomNumber, availability);
+                        hotel.updateRoomAvailability(roomNumber, availability, guestList);
                         break;
                     }
                     case 3:
-                        // Make sure to load the file here before checking
-                        guestList.loadFromFile("iFile.txt");  // This loads the guest list from the file
-
+                        guestList.loadFromFile("reservations.txt");
                         if (guestList.isEmpty()) {
                             cout << "No Reservation is available." << endl;
                         }
@@ -75,13 +77,69 @@ int main() {
                             guestList.displayAll();
                         }
                         break;
-                    case 4:
+                    case 4: { // Search Reservation
+                        string searchTerm;
+                        cout << "\n--- Search Reservation ---" << endl;
+                        cout << "Enter guest name, phone number, or room number: ";
+                        cin.ignore(); // Clear the input buffer
+                        getline(cin, searchTerm);
+
+                        Guest* foundGuest = guestList.searchGuest(searchTerm);
+                        cout << "---------------------------------------------------------------------------------" << endl;
+                        cout << "| Room Number | Room Type |      Name      |     Phone    | Time of Reservation |" << endl;
+                        cout << "---------------------------------------------------------------------------------" << endl;
+
+                        if (foundGuest) {
+                            cout << "| " << setw(12) << left << foundGuest->getRoomNumber()
+                                << "| " << setw(10) << left << foundGuest->getRoomType()
+                                << "| " << setw(15) << left << foundGuest->getName()
+                                << "| " << setw(13) << left << foundGuest->getPhone()
+                                << "| " << setw(20) << left << foundGuest->getRTime() << "|" << endl;
+                        }
+                        else {
+                            cout << "| No reservation found for: " << searchTerm << "                                                   |" << endl;
+                        }
+
+                        cout << "---------------------------------------------------------------------------------" << endl;
+                        break;
+
+                    }
+                    case 5: { // Process Reservations (Queue)
+                        hotel.processWaitingList(); // Process the next guest in the queue
+                        break;
+                    }
+                    case 6: {
+                        //Extend Reservation
+                        int roomNumber;
+                        int additionalDays;
+                        cout << "\n--- Extend Reservation ---" << endl;
+                        cout << "Enter room number to extend reservation: ";
+                        cin >> roomNumber;
+                        cout << "Enter number of days to extend: ";
+                        cin >> additionalDays;
+
+                        // Find guest by room number
+                        Guest* guest = guestList.searchGuest(to_string(roomNumber));
+                        if (guest != nullptr) {
+                            // Extend reservation by additional days
+                            string originalTime = guest->getRTime();
+                            processReservationOrCalculatePrice(hotel, guestList, guest->getRoomType()[0],
+                                additionalDays, true, originalTime);
+
+                            cout << "Reservation extended for " << additionalDays << " days." << endl;
+                        }
+                        else {
+                            cout << "No reservation found for room number " << roomNumber << endl;
+                        }
+                        break;
+                    }
+                    case 7:
                         cout << "Logging out..." << endl;
                         break;
                     default:
                         cout << "Invalid choice, try again." << endl;
                     }
-                } while (adminChoice != 4);
+                } while (adminChoice != 7);
             }
             else {
                 cout << "Invalid login credentials. Please try again." << endl;
@@ -90,116 +148,56 @@ int main() {
         }
         case 2: {
             // Guest Reservation
-            string guestName, guestPhone;
-            char roomType, anotherReservation;
-
-            //  do {
-            cout << "\n--- Guest Reservation ---" << endl;
-            cout << "Enter your name: ";
-            cin >> guestName;
-            cout << "Enter your phone number: ";
-            cin >> guestPhone;
-
-
-            // Display room types with prices before asking for input
-            cout << "\nRoom Types and Prices:" << endl;
-            cout << "S: Single (RM 100 per night)" << endl;
-            cout << "D: Double (RM 150 per night)" << endl;
-            cout << "P: Penthouse (RM 300 per night)" << endl;
-            cout << "T: Suite (RM 200 per night)" << endl;
-
-            // Ask user for room type
-            cout << "\nEnter room type (S for Single, D for Double, P for Penthouse, T for Suite): ";
-            cin >> roomType;
-
-            // Handle room type input and assign the price
-            string roomTypeStr;
-            int roomPrice = 0;
-            switch (roomType) {
-            case 'S': case 's':
-                roomTypeStr = "Single";
-                roomPrice = 100;
-                break;
-            case 'D': case 'd':
-                roomTypeStr = "Double";
-                roomPrice = 150;
-                break;
-            case 'P': case 'p':
-                roomTypeStr = "Penthouse";
-                roomPrice = 300;
-                break;
-            case 'T': case 't':
-                roomTypeStr = "Suite";
-                roomPrice = 200;
-                break;
-            default:
-                cout << "Invalid room type selected. Please try again." << endl;
-                continue;  // Skip to the next iteration of the loop
-            }
-
-
-            // Ask how many days they want to stay
+            char roomType;
             int days;
-            cout << "How many days would you like to stay? ";
+            cout << "\n--- Guest Reservation ---" << endl;
+            cout << "Room types:\n S for Single \t\t[Rm 100 per day]\n D for Double \t\t[Rm 150 per day]\n P for Penthouse \t[Rm 500 per day]\n T for Suite \t\t[Rm 200 per day]\n";
+            cout << "\nEnter room type : ";
+            cin >> roomType;
+            cout << "Enter number of days: ";
             cin >> days;
 
-            // Calculate total cost
-            int totalCost = roomPrice * days;
+            // set time of the reservation
+            time_t now = time(0);
+            tm* localTime = localtime(&now);
 
-            // Display the selected room type and price
-            cout << "You have selected " << roomTypeStr << " (RM " << roomPrice << " per night)." << endl;
-            cout << "Total cost for " << days << " days: RM " << totalCost << endl;
+            string rtime =
+                (localTime->tm_mon + 1 < 10 ? "0" : "") + to_string(localTime->tm_mon + 1) + "/" +  // Month
+                (localTime->tm_mday < 10 ? "0" : "") + to_string(localTime->tm_mday) + "/" +        // Day
+                to_string(localTime->tm_year + 1900) + "-" +                                       // Year
+                (localTime->tm_hour < 10 ? "0" : "") + to_string(localTime->tm_hour) + ":" +       // Hour
+                (localTime->tm_min < 10 ? "0" : "") + to_string(localTime->tm_min) + ":" +        // Minute
+                (localTime->tm_sec < 10 ? "0" : "") + to_string(localTime->tm_sec);               // Second
 
-            // Attempt to reserve the room based on the selected type
-            if (!hotel.reserveRoomByType(roomTypeStr, guestName, guestPhone, guestList)) {
-                cout << "Reservation failed. Try again later." << endl;
-            }
-            else {
-                cout << "Reservation successful!" << endl;
-            }
-
-            // Ask if the user wants to make another reservation
-            cout << "\nDo you want to make another reservation? (y/n): ";
-            cin >> anotherReservation;
-            //} while (anotherReservation == 'y' || anotherReservation == 'Y');
-
-            // Save the updated guest list to the file after reservation(s)
-            guestList.saveToFile("iFile.txt");
+            // Process reservation
+            processReservationOrCalculatePrice(hotel, guestList, roomType, days, true, rtime);
 
             break;
         }
+        case 3: {
+            // Price Calculator
+            char roomType;
+            int days;
+            string rtime = "";
+            cout << "\n--- Price Calculator ---" << endl;
+            cout << "Room types:\n S for Single \t\t[Rm 100 per day]\n D for Double \t\t[Rm 150 per day]\n P for Penthouse \t[Rm 500 per day]\n T for Suite \t\t[Rm 200 per day]\n";
+            cout << "\nEnter room type : ";
+            cin >> roomType;
+            cout << "Enter number of days: ";
+            cin >> days;
 
-
-        case 3:
+            // Just calculate the price
+            processReservationOrCalculatePrice(hotel, guestList, roomType, days, false, rtime);
+            break;
+        }
+        case 4:
             cout << "Exiting program..." << endl;
             return 0;
         default:
             cout << "Invalid choice. Please try again." << endl;
         }
+
     }
 
     return 0;
 }
-/*// Ask user for room type
-            cout << "Enter room type (S for Single, D for Double, P for Penthouse, T for Suite): ";
-            cin >> roomType;
-
-            // Handle room type input
-            string roomTypeStr;
-            switch (roomType) {
-            case 'S': case 's':
-                roomTypeStr = "Single";
-                break;
-            case 'D': case 'd':
-                roomTypeStr = "Double";
-                break;
-            case 'P': case 'p':
-                roomTypeStr = "Penthouse";
-                break;
-            case 'T': case 't':
-                roomTypeStr = "Suite";
-                break;
-            default:
-                cout << "Invalid room type selected. Please try again." << endl;
-                continue;  // Skip to the next iteration of the loop
-            }*/
